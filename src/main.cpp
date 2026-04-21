@@ -24,6 +24,8 @@ struct CPU {
     uint32_t x[32]{};
     vector<uint8_t> mem;
     uint32_t mem_base{0}; // base virtual address of mem[0]
+    bool halted{false};
+    int32_t exit_code{0};
     CPU(): mem(MEM_SIZE, 0) { }
 
     bool translate(uint32_t addr, uint32_t size, uint32_t &idx) const {
@@ -266,8 +268,8 @@ int main(){
                 // a7 is x17, a0 is x10
                 uint32_t a7 = x[17];
                 if (a7==10 || a7==93){
-                    // exit: print return code in a0 as decimal and newline
-                    cout << (int32_t)x[10] << '\n';
+                    cpu.exit_code = (int32_t)x[10];
+                    cpu.halted = true;
                     return 0;
                 } else if (a7==1){
                     cout << (int32_t)x[10];
@@ -275,7 +277,10 @@ int main(){
                     cout << (char)(x[10] & 0xFF);
                 } else if (a7==4){
                     uint32_t addr = x[10];
-                    while (addr < cpu.mem.size() && cpu.mem[addr]!=0){ cout << (char)cpu.mem[addr]; ++addr; }
+                    while (true){
+                        uint32_t idx; if (!cpu.translate(addr,1,idx)) break;
+                        char c = (char)cpu.mem[idx]; if (c==0) break; cout << c; ++addr;
+                    }
                 }
                 break;
             }
