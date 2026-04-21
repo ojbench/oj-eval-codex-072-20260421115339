@@ -83,6 +83,7 @@ void load_image(CPU &cpu){
     }
     // Check for '@' format
     uint32_t cur = 0;
+    uint32_t base_addr = UINT32_MAX;
     bool has_at=false;
     for(auto &ln: lines){ if(!ln.empty() && ln[0]=='@'){ has_at=true; break;} }
     if (has_at){
@@ -93,6 +94,7 @@ void load_image(CPU &cpu){
                 uint32_t addr=0;
                 for (size_t i=1;i<ln.size();++i){ char c=ln[i]; uint8_t d; if(!parse_hex(c,d)) break; addr=(addr<<4)|d; }
                 cur=addr;
+                base_addr = min(base_addr, addr);
             } else {
                 // bytes in hex, optionally space-separated
                 size_t i=0; while(i<ln.size()){
@@ -102,6 +104,10 @@ void load_image(CPU &cpu){
                     uint8_t byte = (h1<<4)|h2; cpu.store8(cur++, byte); i+=2;
                 }
             }
+        }
+        if (base_addr!=UINT32_MAX) {
+            // Set PC to base of image
+            cpu.pc = base_addr;
         }
         return;
     }
@@ -114,12 +120,14 @@ void load_image(CPU &cpu){
         uint8_t h1,h2; if(!parse_hex(concat[i],h1) || !parse_hex(concat[i+1],h2)) { ++i; continue; }
         uint8_t byte=(h1<<4)|h2; cpu.store8(cur++, byte); i+=2;
     }
+    // sequential form: start at 0
+    cpu.pc = 0;
 }
 
 int main(){
     CPU cpu;
     load_image(cpu);
-    cpu.pc = 0; // assume entry at 0
+    // pc set by loader
 
     auto &x = cpu.x;
     uint64_t step=0;
