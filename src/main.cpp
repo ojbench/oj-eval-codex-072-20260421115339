@@ -23,36 +23,45 @@ struct CPU {
     uint32_t pc{0};
     uint32_t x[32]{};
     vector<uint8_t> mem;
+    uint32_t mem_base{0}; // base virtual address of mem[0]
     CPU(): mem(MEM_SIZE, 0) { }
 
+    bool translate(uint32_t addr, uint32_t size, uint32_t &idx) const {
+        if (addr < mem_base) return false;
+        uint64_t off = (uint64_t)addr - (uint64_t)mem_base;
+        if (off + size > mem.size()) return false;
+        idx = (uint32_t)off;
+        return true;
+    }
     uint32_t load32(uint32_t addr) const {
-        if (addr+3 >= mem.size()) return 0;
-        return (uint32_t)mem[addr] | ((uint32_t)mem[addr+1]<<8) |
-               ((uint32_t)mem[addr+2]<<16) | ((uint32_t)mem[addr+3]<<24);
+        uint32_t i;
+        if (!translate(addr, 4, i)) return 0;
+        return (uint32_t)mem[i] | ((uint32_t)mem[i+1]<<8) |
+               ((uint32_t)mem[i+2]<<16) | ((uint32_t)mem[i+3]<<24);
     }
     uint16_t load16(uint32_t addr) const {
-        if (addr+1 >= mem.size()) return 0;
-        return (uint16_t)mem[addr] | ((uint16_t)mem[addr+1]<<8);
+        uint32_t i; if (!translate(addr, 2, i)) return 0;
+        return (uint16_t)mem[i] | ((uint16_t)mem[i+1]<<8);
     }
     uint8_t load8(uint32_t addr) const {
-        if (addr >= mem.size()) return 0;
-        return mem[addr];
+        uint32_t i; if (!translate(addr, 1, i)) return 0;
+        return mem[i];
     }
     void store32(uint32_t addr, uint32_t val) {
-        if (addr+3 >= mem.size()) return;
-        mem[addr] = val & 0xFF;
-        mem[addr+1] = (val>>8)&0xFF;
-        mem[addr+2] = (val>>16)&0xFF;
-        mem[addr+3] = (val>>24)&0xFF;
+        uint32_t i; if (!translate(addr, 4, i)) return;
+        mem[i] = val & 0xFF;
+        mem[i+1] = (val>>8)&0xFF;
+        mem[i+2] = (val>>16)&0xFF;
+        mem[i+3] = (val>>24)&0xFF;
     }
     void store16(uint32_t addr, uint16_t val) {
-        if (addr+1 >= mem.size()) return;
-        mem[addr] = val & 0xFF;
-        mem[addr+1] = (val>>8)&0xFF;
+        uint32_t i; if (!translate(addr, 2, i)) return;
+        mem[i] = val & 0xFF;
+        mem[i+1] = (val>>8)&0xFF;
     }
     void store8(uint32_t addr, uint8_t val) {
-        if (addr >= mem.size()) return;
-        mem[addr] = val;
+        uint32_t i; if (!translate(addr, 1, i)) return;
+        mem[i] = val;
     }
 };
 
@@ -106,7 +115,8 @@ void load_image(CPU &cpu){
             }
         }
         if (base_addr!=UINT32_MAX) {
-            // Set PC to base of image
+            // Set memory base and PC to base of image
+            cpu.mem_base = base_addr;
             cpu.pc = base_addr;
         }
         return;
@@ -121,6 +131,7 @@ void load_image(CPU &cpu){
         uint8_t byte=(h1<<4)|h2; cpu.store8(cur++, byte); i+=2;
     }
     // sequential form: start at 0
+    cpu.mem_base = 0;
     cpu.pc = 0;
 }
 
@@ -132,7 +143,10 @@ int main(){
     auto &x = cpu.x;
     uint64_t step=0;
     const uint64_t STEP_LIMIT = 200000000ull; // prevent infinite loop
-    while (cpu.pc+3 < cpu.mem.size()){
+    while (true){
+        // Check PC is mapped
+        uint32_t tmp;
+        if (!cpu.translate(cpu.pc, 4, tmp)) break;
         if (++step > STEP_LIMIT) break;
         uint32_t inst = cpu.load32(cpu.pc);
         uint32_t opc = inst & 0x7F;
@@ -243,6 +257,9 @@ int main(){
                     write_x(rd, next_pc);
                     next_pc = t;
                 }
+                break;
+            }
+            case 0x0F: { // FENCE/FENCE.I -> treat as NOP
                 break;
             }
             case 0x73: { // SYSTEM ECALL
