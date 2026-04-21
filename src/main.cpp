@@ -240,8 +240,9 @@ int main(){
             case 0x73: { // SYSTEM ECALL
                 // a7 is x17, a0 is x10
                 uint32_t a7 = x[17];
-                if (a7==10){
-                    // exit
+                if (a7==10 || a7==93){
+                    // exit: print return code in a0 as decimal and newline
+                    cout << (int32_t)x[10] << '\n';
                     return 0;
                 } else if (a7==1){
                     cout << (int32_t)x[10];
@@ -262,4 +263,3 @@ int main(){
     }
     return 0;
 }
-
